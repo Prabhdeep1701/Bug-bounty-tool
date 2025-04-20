@@ -175,9 +175,9 @@ class BugBountyAI:
         self.payload_generator = pipeline("text-generation", model="gpt2")
         
         self.config = {
-            'max_depth': 5,  
-            'threads': 8,
-            'rate_limit_delay': (0.5, 2),
+            'max_depth': 10,  # Increased from 5 to 10
+            'threads': 12,    # Increased from 8 to 12
+            'rate_limit_delay': (0.3, 1.5),  # More aggressive scanning
             'test_payloads': {
                 'xss': [
                     '<script>alert(1)</script>', 
@@ -563,7 +563,15 @@ class BugBountyAI:
             'SSRF': 'High',
             'XXE': 'High',
             'LFI': 'High',
-            'Missing Authentication': 'Critical'
+            'Missing Authentication': 'Critical',
+            'Potential RCE': 'Critical',
+            'Prototype Pollution': 'High',
+            'JWT Weakness': 'High',
+            'SSTI': 'High',
+            'Insecure Deserialization': 'Critical',
+            'DOM-based XSS': 'Medium',
+            'HTTP Request Smuggling': 'High',
+            'GraphQL Introspection': 'Medium'
         }
         return severity_map.get(vuln_type, 'Medium')
     
