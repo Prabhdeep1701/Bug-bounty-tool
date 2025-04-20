@@ -1,0 +1,48 @@
+{
+  "target": "https://dhruvgupta-portfolio.vercel.app",
+  "date": "2025-04-20 12:30:37",
+  "vulnerabilities": [
+    {
+      "type": "SSRF",
+      "url": "https://dhruvgupta-portfolio.vercel.app/",
+      "payload": "http://127.0.0.1",
+      "confidence": 0.8,
+      "timestamp": 1745132436.884326
+    },
+    {
+      "type": "SSRF",
+      "url": "https://dhruvgupta-portfolio.vercel.app/",
+      "payload": "http://localhost",
+      "confidence": 0.8,
+      "timestamp": 1745132436.921289
+    },
+    {
+      "type": "SSRF",
+      "url": "https://dhruvgupta-portfolio.vercel.app/",
+      "payload": "http://169.254.169.254/latest/meta-data/",
+      "confidence": 0.8,
+      "timestamp": 1745132436.954574
+    },
+    {
+      "type": "SSRF",
+      "url": "https://dhruvgupta-portfolio.vercel.app/",
+      "payload": "http://internal.service",
+      "confidence": 0.8,
+      "timestamp": 1745132436.993375
+    },
+    {
+      "type": "SSRF",
+      "url": "https://dhruvgupta-portfolio.vercel.app/",
+      "payload": "file:///etc/passwd",
+      "confidence": 0.8,
+      "timestamp": 1745132437.0324612
+    },
+    {
+      "type": "Potential Logic Flaw",
+      "url": "https://dhruvgupta-portfolio.vercel.app/",
+      "payload": "Missing CSRF token",
+      "confidence": 0.8,
+      "timestamp": 1745132437.032685
+    }
+  ]
+}

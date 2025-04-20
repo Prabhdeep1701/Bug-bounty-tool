@@ -1,0 +1,13 @@
+{
+  "target": "https://student.bennetterp.camu.in",
+  "date": "2025-04-20 12:29:57",
+  "vulnerabilities": [
+    {
+      "type": "Potential Logic Flaw",
+      "url": "https://student.bennetterp.camu.in/v2/cafeteria",
+      "payload": "Missing CSRF token",
+      "confidence": 0.5,
+      "timestamp": 1745132397.494578
+    }
+  ]
+}

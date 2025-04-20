@@ -36,12 +36,20 @@ class BugBountyAI:
         self.driver = webdriver.Chrome(options=self.chrome_options)
         self.driver.set_page_load_timeout(30)
 
+    def update_progress(self, progress, message):
+        """Update scan progress"""
+        self.progress = progress
+        self.status_message = message
+        print(f"[Progress: {progress}%] {message}")
+
     def crawl(self, start_url, depth=0):
         """Enhanced crawling with more interaction"""
         if depth > self.config['max_depth'] or start_url in self.visited_urls:
             return
             
         self.visited_urls.add(start_url)
+        progress = int((len(self.visited_urls) / (self.config['max_depth'] * 10)) * 100)
+        self.update_progress(progress, f"Crawling: {start_url}")
         print(f"[*] Crawling: {start_url}")
         
         try:
@@ -265,362 +273,113 @@ class BugBountyAI:
         return url.startswith(self.current_scope)
     
     def test_page(self, url, soup):
-        """Enhanced page testing with more vulnerability checks"""
+        """Enhanced page testing with more comprehensive vulnerability checks"""
         print(f"[*] Testing: {url}")
+        
+        # Test all forms
         forms = soup.find_all('form')
         for form in forms:
             self.test_form(url, form)
         
+        # Test all links for parameters
+        links = [a['href'] for a in soup.find_all('a', href=True) if '?' in a['href']]
+        for link in links:
+            self.test_url_parameters(urljoin(url, link))
+        
+        # Enhanced vulnerability tests
+        self.test_idor(url)
+        self.test_ssrf(url, soup)
+        self.test_logic_flaws(url, soup)
+        self.find_api_endpoints(soup)
+        self.test_xxe(url, soup)  
+        self.test_lfi(url)
+        self.test_cors(url)
+        self.test_jwt(url)
         self.test_ssti(url, soup)
         self.test_deserialization(url)
         self.test_dom_xss(url, soup)
-        self.test_request_smuggling(url)
-        self.test_graphql(url)
 
-    def test_ssti(self, url, soup):
-        """Test for Server-Side Template Injection"""
-        inputs = soup.find_all('input')
-        for input in inputs:
-            if input.get('type') in ['text', 'search', 'email']:
-                for payload in self.config['test_payloads'].get('ssti', []):
-                    try:
-                        data = {input.get('name', 'input'): payload}
-                        response = self.session.post(url, data=data)
-                        if '49' in response.text:
-                            self.record_vulnerability(
-                                type="SSTI",
-                                url=url,
-                                payload=payload,
-                                confidence=0.85,
-                                details="Server-Side Template Injection vulnerability detected"
-                            )
-                    except Exception as e:
-                        print(f"[!] SSTI test error: {str(e)}")
-
-    def test_deserialization(self, url):
-        """Test for Insecure Deserialization"""
-        for payload in self.config['test_payloads'].get('deserialization', []):
-            try:
-                headers = {'Content-Type': 'application/java-serialized-object'}
-                response = self.session.post(url, data=payload, headers=headers)
-                if response.status_code == 500 and 'serialization' in response.text.lower():
-                    self.record_vulnerability(
-                        type="Insecure Deserialization",
-                        url=url,
-                        payload=payload[:20] + "...",
-                        confidence=0.8,
-                        details="Potential insecure deserialization vulnerability detected"
-                    )
-            except Exception as e:
-                print(f"[!] Deserialization test error: {str(e)}")
-
-    def test_dom_xss(self, url, soup):
-        """Test for DOM-based XSS"""
-        scripts = soup.find_all('script')
-        for script in scripts:
-            if script.string:
-                for payload in self.config['test_payloads'].get('dom_xss', []):
-                    if payload in script.string:
-                        self.record_vulnerability(
-                            type="DOM-based XSS",
-                            url=url,
-                            payload=payload,
-                            confidence=0.75,
-                            details="Potential DOM-based XSS vulnerability detected"
-                        )
-
-    def test_request_smuggling(self, url):
-        """Test for HTTP Request Smuggling"""
+    def test_url_parameters(self, url):
+        """Test URL parameters for common vulnerabilities"""
         parsed = urlparse(url)
-        target = f"{parsed.scheme}://{parsed.netloc}"
+        params = parse_qs(parsed.query)
         
-        for payload in self.config['test_payloads'].get('request_smuggling', []):
-            try:
-                conn = http.client.HTTPConnection(parsed.netloc)
-                conn.request("POST", parsed.path, body=payload)
-                response = conn.getresponse()
-                if 'admin' in response.read().decode().lower():
-                    self.record_vulnerability(
-                        type="HTTP Request Smuggling",
-                        url=url,
-                        payload=payload[:50] + "...",
-                        confidence=0.9,
-                        details="Potential HTTP Request Smuggling vulnerability detected"
-                    )
-            except Exception as e:
-                print(f"[!] Request smuggling test error: {str(e)}")
-
-    def test_graphql(self, url):
-        """Test for GraphQL vulnerabilities"""
-        graphql_endpoints = ['/graphql', '/api', '/graphql-api', '/query']
-        
-        for endpoint in graphql_endpoints:
-            test_url = urljoin(url, endpoint)
-            for payload in self.config['test_payloads'].get('graphql', []):
+        for param in params:
+            # Test for XSS in URL parameters
+            for payload in self.config['test_payloads']['xss']:
+                test_url = url.replace(
+                    f"{param}={params[param][0]}",
+                    f"{param}={payload}"
+                )
                 try:
-                    headers = {'Content-Type': 'application/json'}
-                    data = json.dumps({'query': payload})
-                    response = self.session.post(test_url, data=data, headers=headers)
-                    
-                    if response.status_code == 200 and '__schema' in response.text:
+                    response = self.session.get(test_url)
+                    if payload in response.text:
                         self.record_vulnerability(
-                            type="GraphQL Introspection",
+                            type="Reflected XSS",
                             url=test_url,
                             payload=payload,
                             confidence=0.85,
-                            details="GraphQL introspection enabled - potential information disclosure"
+                            details="XSS payload reflected in response"
                         )
                 except Exception as e:
-                    print(f"[!] GraphQL test error: {str(e)}")
-
-    def test_open_redirect(self, url, soup):
-        """Test for open redirect vulnerabilities"""
-        for param in ['url', 'redirect', 'next', 'return']:
-            for payload in self.config['test_payloads'].get('open_redirect', []):
-                test_url = f"{url}?{param}={payload}" if '?' not in url else f"{url}&{param}={payload}"
+                    print(f"[!] XSS test error for {test_url}: {str(e)}")
+            
+            # Test for SQLi in URL parameters
+            for payload in self.config['test_payloads']['sqli']:
+                test_url = url.replace(
+                    f"{param}={params[param][0]}",
+                    f"{param}={payload}"
+                )
                 try:
-                    response = self.session.get(test_url, allow_redirects=False)
-                    if response.status_code in (301, 302, 307, 308):
-                        location = response.headers.get('location', '')
-                        if any(x in location for x in ['evil.com', '//evil.com']):
-                            self.record_vulnerability(
-                                type="Open Redirect",
-                                url=test_url,
-                                payload=payload,
-                                confidence=0.85,
-                                details="Open redirect vulnerability detected"
-                            )
+                    response = self.session.get(test_url)
+                    if "error" in response.text.lower() or "sql" in response.text.lower():
+                        self.record_vulnerability(
+                            type="SQL Injection",
+                            url=test_url,
+                            payload=payload,
+                            confidence=0.75,
+                            details="Possible SQL injection vulnerability"
+                        )
                 except Exception as e:
-                    print(f"[!] Open redirect test error: {str(e)}")
+                    print(f"[!] SQLi test error for {test_url}: {str(e)}")
 
-    def test_clickjacking(self, url):
-        """Test for missing X-Frame-Options header"""
-        try:
-            response = self.session.get(url)
-            if 'x-frame-options' not in response.headers:
-                self.record_vulnerability(
-                    type="Clickjacking",
-                    url=url,
-                    payload="Missing X-Frame-Options",
-                    confidence=0.7,
-                    details="Missing X-Frame-Options header makes site vulnerable to clickjacking"
-                )
-        except Exception as e:
-            print(f"[!] Clickjacking test error: {str(e)}")
-
-    def check_security_headers(self, url):
-        """Check for important security headers"""
-        try:
-            response = self.session.get(url)
-            missing_headers = []
-            
-            if 'content-security-policy' not in response.headers:
-                missing_headers.append('Content-Security-Policy')
-            if 'x-content-type-options' not in response.headers:
-                missing_headers.append('X-Content-Type-Options')
-            if 'x-xss-protection' not in response.headers:
-                missing_headers.append('X-XSS-Protection')
-            if 'strict-transport-security' not in response.headers:
-                missing_headers.append('Strict-Transport-Security')
-                
-            if missing_headers:
-                self.record_vulnerability(
-                    type="Missing Security Headers",
-                    url=url,
-                    payload=", ".join(missing_headers),
-                    confidence=0.8,
-                    details="Missing important security headers: " + ", ".join(missing_headers)
-                )
-        except Exception as e:
-            print(f"[!] Security headers check error: {str(e)}")
-
-    def check_sensitive_data(self, url, soup):
-        """Scan for exposed sensitive data patterns"""
-        sensitive_patterns = {
-            'API Keys': r'(?i)(key|api|token|secret)[\"\']?\s*[:=]\s*[\"\']?[a-z0-9]{20,}[\"\']?',
-            'Email Addresses': r'[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}',
-            'Credit Cards': r'\b(?:\d[ -]*?){13,16}\b',
-            'AWS Keys': r'AKIA[0-9A-Z]{16}',
-            'Private IPs': r'(?:10|127|192\.168|172\.(?:1[6-9]|2[0-9]|3[0-1]))\.\d{1,3}\.\d{1,3}'
-        }
-        
-        text = soup.get_text()
-        for data_type, pattern in sensitive_patterns.items():
-            matches = re.findall(pattern, text)
-            if matches:
-                self.record_vulnerability(
-                    type="Sensitive Data Exposure",
-                    url=url,
-                    payload=data_type,
-                    confidence=0.9,
-                    details=f"Potential {data_type} exposure detected: {matches[0]}... (truncated)"
-                )
-
-    def check_subdomain_takeover(self):
-        """Check for potential subdomain takeover opportunities"""
-        try:
-            domain = urlparse(self.current_scope).netloc
-            subdomains = self.get_subdomains(domain)
-            
-            for subdomain in subdomains:
-                for service in self.config['test_payloads'].get('subdomain_takeover', []):
-                    if service in subdomain:
-                        try:
-                            response = self.session.get(f"http://{subdomain}", timeout=5)
-                            if response.status_code == 404 and service in response.text:
-                                self.record_vulnerability(
-                                    type="Potential Subdomain Takeover",
-                                    url=subdomain,
-                                    payload=service,
-                                    confidence=0.75,
-                                    details=f"Potential subdomain takeover possible on {service}"
-                                )
-                        except:
-                            continue
-        except Exception as e:
-            print(f"[!] Subdomain takeover check error: {str(e)}")
-
-    def get_subdomains(self, domain):
-        """Get subdomains using common DNS techniques"""
-        # This is a placeholder - in a real implementation you'd use DNS enumeration
-        # or services like crt.sh to find subdomains
-        common_subdomains = ['dev', 'test', 'staging', 'api', 'admin']
-        return [f"{sub}.{domain}" for sub in common_subdomains]
-
-    def test_xxe(self, url, soup):
-        """Test for XML External Entity vulnerabilities"""
-        if not any(tag.name == 'input' and tag.get('type') == 'file' for tag in soup.find_all()):
-            return
-            
-        for payload in self.config['test_payloads'].get('xxe', []):
-            try:
-                files = {'file': ('test.xml', payload)}
-                response = self.session.post(url, files=files)
-                if 'root:x:' in response.text or 'internal.service' in response.text:
-                    self.record_vulnerability(
-                        type="XXE Injection",
-                        url=url,
-                        payload=payload,
-                        confidence=0.8,
-                        details="XML External Entity injection vulnerability detected"
-                    )
-            except Exception as e:
-                print(f"[!] XXE test error: {str(e)}")
-
-    def test_lfi(self, url):
-        """Test for Local File Inclusion vulnerabilities"""
-        for payload in self.config['test_payloads'].get('lfi', []):
-            test_url = f"{url}?file={payload}" if '?' not in url else f"{url}&file={payload}"
-            try:
-                response = self.session.get(test_url)
-                if 'root:x:' in response.text:
-                    self.record_vulnerability(
-                        type="LFI",
-                        url=test_url,
-                        payload=payload,
-                        confidence=0.85,
-                        details="Local File Inclusion vulnerability detected"
-                    )
-            except Exception as e:
-                print(f"[!] LFI test error: {str(e)}")
-
-    def record_vulnerability(self, type, url, payload, confidence, details=None):
-        """Enhanced vulnerability recording with detailed information"""
-        for v in self.vulnerabilities:
-            if v['url'] == url and v['type'] == type and v['payload'] == payload:
-                return
-                
-        vulnerability = {
-            'type': type,
-            'url': url,
-            'payload': payload,
-            'confidence': confidence,
-            'timestamp': time.time(),
-            'details': details or self.get_vulnerability_details(type),
-            'severity': self.assess_severity(type)
-        }
-        self.vulnerabilities.append(vulnerability)
-
-    def get_vulnerability_details(self, vuln_type):
-        """Provide detailed information about each vulnerability type"""
-        details = {
-            'XSS': "Cross-Site Scripting allows attackers to execute malicious scripts in the victim's browser",
-            'SQL Injection': "Allows attackers to interfere with database queries and potentially access sensitive data",
-            'IDOR': "Insecure Direct Object References allow unauthorized access to resources by modifying parameters",
-            'SSRF': "Server-Side Request Forgery can force the server to make requests to internal resources",
-            'XXE': "XML External Entity processing can lead to file disclosure and server-side request forgery",
-            'LFI': "Local File Inclusion can expose sensitive files on the server",
-            'Missing Authentication': "Missing authentication checks allow unauthorized access to sensitive functionality"
-        }
-        return details.get(vuln_type, "No additional details available")
-
-    def assess_severity(self, vuln_type):
-        """Assign severity levels to vulnerabilities"""
-        severity_map = {
-            'XSS': 'High',
-            'SQL Injection': 'Critical',
-            'IDOR': 'Medium',
-            'SSRF': 'High',
-            'XXE': 'High',
-            'LFI': 'High',
-            'Missing Authentication': 'Critical',
-            'Potential RCE': 'Critical',
-            'Prototype Pollution': 'High',
-            'JWT Weakness': 'High',
-            'SSTI': 'High',
-            'Insecure Deserialization': 'Critical',
-            'DOM-based XSS': 'Medium',
-            'HTTP Request Smuggling': 'High',
-            'GraphQL Introspection': 'Medium'
-        }
-        return severity_map.get(vuln_type, 'Medium')
-    
     def test_form(self, url, form):
-        """Test web forms for vulnerabilities"""
+        """Enhanced form testing with better detection"""
         form_details = {
             'action': form.get('action'),
             'method': form.get('method', 'get').lower(),
-            'inputs': [input.get('name') for input in form.find_all('input')]
+            'inputs': [input.get('name') for input in form.find_all('input') if input.get('name')]
         }
         
-        print(f"[*] Testing form at {url} with {len(form_details['inputs'])} inputs")
-        
-        # Test XSS
-        for payload in self.config['test_payloads']['xss']:
-            if self.submit_form_with_payload(form_details, payload):
-                self.record_vulnerability(
-                    type="XSS",
-                    url=url,
-                    payload=payload,
-                    confidence=0.8
-                )
-        
-        # Test SQLi
-        for payload in self.config['test_payloads']['sqli']:
-            if self.submit_form_with_payload(form_details, payload):
-                response = self.submit_form_with_payload(form_details, payload)
-                if "error" in response.text.lower() or "sql" in response.text.lower():
-                    self.record_vulnerability(
-                        type="SQL Injection",
-                        url=url,
-                        payload=payload,
-                        confidence=0.7
-                    )
-    
-    def submit_form_with_payload(self, form_details, payload):
-        """Submit a form with test payload"""
-        target_url = urljoin(self.current_scope, form_details['action'])
-        data = {input_name: payload for input_name in form_details['inputs']}
-        
-        try:
-            if form_details['method'] == 'post':
-                return self.session.post(target_url, data=data)
-            else:
-                return self.session.get(target_url, params=data)
-        except Exception as e:
-            print(f"[!] Form submission error: {str(e)}")
-            return None
-    
+        # Skip forms without inputs
+        if not form_details['inputs']:
+            return
+            
+        # Test all payload types
+        for vuln_type in ['xss', 'sqli']:
+            for payload in self.config['test_payloads'][vuln_type]:
+                try:
+                    response = self.submit_form_with_payload(form_details, payload)
+                    if response:
+                        if vuln_type == 'xss' and payload in response.text:
+                            self.record_vulnerability(
+                                type="Stored XSS",
+                                url=url,
+                                payload=payload,
+                                confidence=0.8,
+                                details="XSS payload stored in form response"
+                            )
+                        elif vuln_type == 'sqli' and ("error" in response.text.lower() or "sql" in response.text.lower()):
+                            self.record_vulnerability(
+                                type="SQL Injection",
+                                url=url,
+                                payload=payload,
+                                confidence=0.7,
+                                details="Possible SQL injection vulnerability"
+                            )
+                except Exception as e:
+                    print(f"[!] {vuln_type} test error: {str(e)}")
+
     def test_idor(self, url):
         """Test for Insecure Direct Object References"""
         for pattern in self.config['test_payloads']['idor']:
@@ -732,13 +491,15 @@ class BugBountyAI:
         """Generate a vulnerability report"""
         report = {
             'target': self.current_scope,
-            'date': time.strftime("%Y-%m-%d"),
+            'date': time.strftime("%Y-%m-%d %H:%M:%S"),
             'vulnerabilities': self.vulnerabilities
         }
-        filename = f"report_{self.current_scope.replace('://', '_').replace('/', '_')}.json"
-        with open(filename, 'w') as f:
+        os.makedirs('reports', exist_ok=True)
+        filename = f"report_{self.current_scope.replace('://', '_').replace('/', '_')}_{int(time.time())}.json"
+        with open(f"reports/{filename}", 'w') as f:
             json.dump(report, f, indent=2)
-        print(f"[+] Report saved to {filename}")
+        print(f"[+] Report saved to reports/{filename}")
+        return report  # Return the report data along with saving it
     
     def scan_network(self, target_ip):
         """Perform basic network scanning (use with caution)"""

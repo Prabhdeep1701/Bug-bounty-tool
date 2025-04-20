@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BugBountyAI Scanner</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .form-group {
+            display: flex;
+            gap: 10px;
+        }
+        input {
+            flex-grow: 1;
+            padding: 8px;
+        }
+        button {
+            padding: 8px 16px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:disabled {
+            background: #cccccc;
+        }
+        .progress-container {
+            margin-top: 20px;
+        }
+        progress {
+            width: 100%;
+            height: 20px;
+        }
+        .results {
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        #downloadBtn {
+            margin-bottom: 15px;
+            display: none; /* Hidden by default */
+        }
+        .vulnerability {
+            margin-bottom: 15px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+        
+        .vulnerability h3 {
+            margin-top: 0;
+        }
+        
+        .vulnerability p {
+            margin: 5px 0;
+        }
+        
+        code {
+            background-color: #f1f1f1;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+        
+        hr {
+            border: 0;
+            height: 1px;
+            background-color: #ddd;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>BugBountyAI Scanner</h1>
+        
+        <div class="form-group">
+            <input type="text" id="target_url" placeholder="Enter target URL (e.g., https://example.com)" required>
+            <button id="scan_button">Start Scan</button>
+        </div>
+        
+        <div class="progress-container" id="progress_container" style="display: none;">
+            <h3>Scan Progress</h3>
+            <progress id="scan_progress" value="0" max="100"></progress>
+            <p id="status_message">Initializing scan...</p>
+        </div>
+        
+        <div class="results" id="results_container" style="display: none;">
+            <h2>Scan Results</h2>
+            <button id="downloadBtn">Download Report</button>
+            <div id="vulnerabilities_list"></div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('scan_button').addEventListener('click', startScan);
+        document.getElementById('downloadBtn').addEventListener('click', downloadReport);
+
+        function startScan() {
+            const targetUrl = document.getElementById('target_url').value.trim();
+            if (!targetUrl) {
+                alert('Please enter a target URL');
+                return;
+            }
+            
+            document.getElementById('scan_button').disabled = true;
+            document.getElementById('progress_container').style.display = 'block';
+            
+            fetch('/start_scan', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `target_url=${encodeURIComponent(targetUrl)}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert(data.error);
+                    document.getElementById('scan_button').disabled = false;
+                    return;
+                }
+                checkScanStatus();
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('scan_button').disabled = false;
+            });
+        }
+
+        function checkScanStatus() {
+            fetch('/scan_status')
+            .then(response => response.json())
+            .then(status => {
+                document.getElementById('scan_progress').value = status.progress;
+                document.getElementById('status_message').textContent = status.message;
+                
+                if (!status.running) {
+                    document.getElementById('scan_button').disabled = false;
+                    
+                    if (status.message.includes('completed')) {
+                        document.getElementById('results_container').style.display = 'block';
+                        document.getElementById('downloadBtn').style.display = 'block';
+                        loadLatestReport();
+                    }
+                } else {
+                    setTimeout(checkScanStatus, 1000);
+                }
+            });
+        }
+
+        function loadLatestReport() {
+            fetch('/reports')
+            .then(response => response.json())
+            .then(reports => {
+                if (reports.length > 0) {
+                    const latestReport = reports[reports.length - 1];
+                    fetch(`/report/${latestReport.name}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        displayResults(data);
+                    });
+                }
+            });
+        }
+
+        function displayResults(data) {
+            const container = document.getElementById('vulnerabilities_list');
+            container.innerHTML = '';
+            
+            if (!data.vulnerabilities || data.vulnerabilities.length === 0) {
+                container.innerHTML = '<p>No vulnerabilities found!</p>';
+                return;
+            }
+            
+            // Group vulnerabilities by type
+            const groupedVulns = {};
+            data.vulnerabilities.forEach(vuln => {
+                if (!groupedVulns[vuln.type]) {
+                    groupedVulns[vuln.type] = [];
+                }
+                groupedVulns[vuln.type].push(vuln);
+            });
+        
+            // Display grouped vulnerabilities
+            for (const [type, vulns] of Object.entries(groupedVulns)) {
+                const typeHeader = document.createElement('h3');
+                typeHeader.textContent = `${type} (${vulns.length} found)`;
+                typeHeader.style.color = getSeverityColor(type);
+                container.appendChild(typeHeader);
+        
+                vulns.forEach(vuln => {
+                    const vulnElement = document.createElement('div');
+                    vulnElement.className = 'vulnerability';
+                    vulnElement.style.borderLeft = `4px solid ${getSeverityColor(type)}`;
+                    vulnElement.innerHTML = `
+                        <p><strong>URL:</strong> ${vuln.url}</p>
+                        <p><strong>Payload:</strong> <code>${vuln.payload}</code></p>
+                        <p><strong>Confidence:</strong> ${(vuln.confidence * 100).toFixed(0)}%</p>
+                        ${vuln.details ? `<p><strong>Details:</strong> ${vuln.details}</p>` : ''}
+                        <hr>
+                    `;
+                    container.appendChild(vulnElement);
+                });
+            }
+        }
+        
+        function getSeverityColor(type) {
+            const severityMap = {
+                'Critical': '#f44336',
+                'High': '#ff9800',
+                'Medium': '#ffeb3b',
+                'Low': '#4CAF50'
+            };
+            // Default to Medium if severity not found
+            return severityMap[type] || '#ffeb3b';
+        }
+
+        function downloadReport() {
+            fetch('/download_report')
+            .then(response => {
+                if (response.ok) return response.blob();
+                throw new Error('No report available');
+            })
+            .then(blob => {
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `security_report_${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                a.remove();
+            })
+            .catch(error => {
+                alert(error.message);
+            });
+        }
+    </script>
+</body>
+</html>
