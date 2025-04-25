@@ -48,6 +48,10 @@ class BugBountyAI:
             self.driver.get(start_url)
             time.sleep(random.uniform(*self.config['rate_limit_delay']))
             
+            # Add these new interactions
+            self.test_all_parameters(start_url)
+            self.test_json_endpoints(start_url)
+            
             self.interact_with_page()
             
             soup = BeautifulSoup(self.driver.page_source, 'html.parser')
@@ -340,6 +344,13 @@ class BugBountyAI:
         for form in forms:
             self.test_form(url, form)
         
+        # Add these new test methods
+        self.test_csrf(url, soup)
+        self.test_cors(url)
+        self.test_jwt(url)
+        self.test_clickjacking(url)
+        self.test_ssrf(url)
+        self.test_xxe(url)
         self.test_ssti(url, soup)
         self.test_deserialization(url)
         self.test_dom_xss(url, soup)
@@ -706,17 +717,46 @@ class BugBountyAI:
             except:
                 continue
     
-    def test_ssrf(self, url, soup):
-        """Test for Server-Side Request Forgery vulnerabilities"""
-        for payload in self.config['test_payloads'].get('ssrf', []):
+    def test_csrf(self, url, soup):
+        """Test for CSRF vulnerabilities"""
+        forms = soup.find_all('form')
+        for form in forms:
+            if not form.find('input', {'name': 'csrf_token'}):
+                self.record_vulnerability(
+                    type="CSRF",
+                    url=url,
+                    payload="Missing CSRF token",
+                    confidence=0.8,
+                    details="Form missing CSRF protection"
+                )
+
+    def test_clickjacking(self, url):
+        """Test for clickjacking vulnerabilities"""
+        try:
+            headers = self.session.head(url).headers
+            if 'X-Frame-Options' not in headers:
+                self.record_vulnerability(
+                    type="Clickjacking",
+                    url=url,
+                    payload="Missing X-Frame-Options",
+                    confidence=0.9,
+                    details="Missing X-Frame-Options header"
+                )
+        except Exception as e:
+            print(f"[!] Clickjacking test error: {str(e)}")
+
+    def test_ssrf(self, url):
+        """Test for SSRF vulnerabilities"""
+        for payload in self.config['test_payloads']['ssrf']:
             try:
-                response = self.session.get(url, params={'url': payload})
-                if 'metadata' in response.text or 'root:x' in response.text:
+                response = self.session.post(url, data={'url': payload})
+                if any(ip in response.text for ip in ['127.0.0.1', 'localhost']):
                     self.record_vulnerability(
                         type="SSRF",
                         url=url,
                         payload=payload,
-                        confidence=0.7
+                        confidence=0.85,
+                        details="Potential SSRF vulnerability detected"
                     )
             except Exception as e:
                 print(f"[!] SSRF test error: {str(e)}")
@@ -837,3 +877,21 @@ if __name__ == "__main__":
     scanner = BugBountyAI()
     target = input("Enter target URL to scan (e.g., https://example.com): ")
     scanner.run(target)
+
+    def test_all_parameters(self, url):
+        """Test all URL parameters for vulnerabilities"""
+        parsed = urlparse(url)
+        params = parse_qs(parsed.query)
+        
+        for param in params:
+            for vuln_type in ['xss', 'sqli', 'rce']:
+                for payload in self.config['test_payloads'][vuln_type]:
+                    test_url = url.replace(
+                        f"{param}={params[param][0]}",
+                        f"{param}={payload}"
+                    )
+                    try:
+                        response = self.session.get(test_url)
+                        self.analyze_response(response, vuln_type, payload)
+                    except Exception as e:
+                        print(f"[!] Parameter test error: {str(e)}")
